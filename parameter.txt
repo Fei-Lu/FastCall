@@ -1,0 +1,23 @@
+Author: Fei Lu
+Email: fl262@cornell.edu; dr.lufei@gmail.com
+Homepage: https://sites.google.com/site/feilu0000/
+
+#This WGS SNP discovery pipeline are designed for both heterozygous and inbred species, especially the depth is high (e.g. >10X each taxon).
+#To run and pipeline, the machine should have Java 8 and samtools installed. The lib directory should stay with FastCall.jar in the same folder. Command (e.g.): java -Xmx200g -jar FastCall.jar parameter.txt > log.txt &
+#To specify reference, bam direcotory, chromosome, and output direcotory, please edit the the parameters below. Also, please keep the order of parameters.
+
+
+#Parameter1:	Reference genome file with an index file (.fai). The reference should be in FastA format. Chromosomes are labled as 1-based numbers (1,2,3,4,5...).
+/workdir/fl262/reference/cassavaV6_23Chr.fa
+
+#Parameter2:	Bam directory, where your bam files are
+/workdir/fl262/bam/
+
+#Parameter3:	Taxa bam information file, including the info about what bams are included for each taxon
+/workdir/fl262/taxaBamMap/taxaBamMap.txt
+
+#Parameter4:	Chromosome on which genotyping will be performed (e.g. 1)
+1
+
+#Parameter5:	VCF output directory
+/workdir/fl262/vcf
