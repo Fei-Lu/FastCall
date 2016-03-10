@@ -1,7 +1,7 @@
 # FastCall
 
 ##Overview
-Super fast variant caller for whole genome shotgun (WGS) sequencing data. It works diploid species, including both inbreds and outcrossers.
+Super fast variant caller for whole genome shotgun (WGS) sequencing data. It works for diploid species, including both inbreds and outcrossers.
 
 ##Prerequisites
 
@@ -23,7 +23,7 @@ https://drive.google.com/open?id=0BzXwMgmlHJ3JbVQyc0JSMmhyQXc
 From linux command line:
 java -Xmx200g -jar FastCall.jar parameter.txt > log.txt &
 
-The parameter file is in the released java package. More details of usage is in the parameter file.
+The parameter file is in the released java package. More details of usage are in the parameter file.
 
 ##Contributor
 
