@@ -94,7 +94,7 @@ public class FastCallSNP {
         String bamDirS = pLineList.get(1);
         String taxaBamMapFileS = pLineList.get(2);
         int currentChr = Integer.valueOf(pLineList.get(3));
-        String vcfDirS = pLineList.get(5);
+        String vcfDirS = pLineList.get(4);
         
         genomeFa = new Fasta(referenceFileS);
         genomeFa.sortRecordByNameValue();
