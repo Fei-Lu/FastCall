@@ -278,6 +278,8 @@ public class FastCallSNP {
             int altSum = 0;
             for (int j = 0; j < pAlleleCount[i].length; j++) {
                 if (this.possibleAllele[j] == refBase) continue;
+                if (this.possibleAllele[j] == 68) continue;
+                if (this.possibleAllele[j] == 73) continue;
                 altSum+=pAlleleCount[i][j];
             }
             refDepth[i] = depth[i] - altSum;
@@ -650,7 +652,7 @@ public class FastCallSNP {
             sum = this.maxFactorial;
         }
         double coe = this.factorialMap.get(sum);
-        for (int i = 0; i < cnt.length; i++) coe = coe/this.factorialMap.get(cnt[i]);
+            for (int i = 0; i < cnt.length; i++) coe = coe/this.factorialMap.get(cnt[i]);
         double max = Double.MAX_VALUE;
         int a1 = 0;
         int a2 = 0;
