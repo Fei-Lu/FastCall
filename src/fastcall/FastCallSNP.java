@@ -238,7 +238,9 @@ public class FastCallSNP {
                     insertionLengthSet.add(length);
                     j+=sb.length();
                     j+=length;
-                    bList.add((byte)73);
+                    if (ba[j-1] == '.' || ba[j-1] == ',') {
+                        bList.add((byte)73);
+                    }                   
                 }
                 else if (ba[j] == '-') {
                     int endIndex = j+2;
@@ -256,7 +258,9 @@ public class FastCallSNP {
                     deletionLengthSet.add(length);
                     j+=sb.length();
                     j+=length;
-                    bList.add((byte)68);
+                    if (ba[j-1] == '.' || ba[j-1] == ',') {
+                        bList.add((byte)68);
+                    }
                 }
                 else if (ba[j] == '^') {
                     j++;
@@ -278,8 +282,8 @@ public class FastCallSNP {
             int altSum = 0;
             for (int j = 0; j < pAlleleCount[i].length; j++) {
                 if (this.possibleAllele[j] == refBase) continue;
-                if (this.possibleAllele[j] == 68) continue;
-                if (this.possibleAllele[j] == 73) continue;
+//                if (this.possibleAllele[j] == 68) continue;
+//                if (this.possibleAllele[j] == 73) continue;
                 altSum+=pAlleleCount[i][j];
             }
             refDepth[i] = depth[i] - altSum;
