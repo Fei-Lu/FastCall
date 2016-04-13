@@ -652,7 +652,7 @@ public class FastCallSNP {
             sum = this.maxFactorial;
         }
         double coe = this.factorialMap.get(sum);
-            for (int i = 0; i < cnt.length; i++) coe = coe/this.factorialMap.get(cnt[i]);
+        for (int i = 0; i < cnt.length; i++) coe = coe/this.factorialMap.get(cnt[i]);
         double max = Double.MAX_VALUE;
         int a1 = 0;
         int a2 = 0;
