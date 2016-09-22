@@ -405,10 +405,10 @@ public class FastCallSNP {
             }
         }
         StringBuilder sb = new StringBuilder();
-        sb.append(currentChr).append("\t").append(position).append("\t").append((char)refBase).append("\t");
+        sb.append(currentChr).append("\t").append(position).append("\t.\t").append((char)refBase).append("\t");
         for (int i = 0; i < altAllele.length; i++) sb.append(String.valueOf((char)altAllele[altAlleleDepthDesendingIndex[i]])).append(",");
         sb.deleteCharAt(sb.length()-1);
-        sb.append("\t").append("DP=").append(totalDepth).append(";AD=").append(refTotalDepth);
+        sb.append("\t.\t.\t").append("DP=").append(totalDepth).append(";AD=").append(refTotalDepth);
         for (int i = 0; i < altAllele.length; i++) sb.append(",").append(altAlleleTotalDepth[altAlleleDepthDesendingIndex[i]]);
         sb.append(";NZ=").append(nonMissingCnt).append(";AP=");
         for (int i = 0; i < refAndAllelePresence.length; i++) sb.append(refAndAllelePresence[i]).append(",");
@@ -628,7 +628,7 @@ public class FastCallSNP {
     
     private String getVCFHeader () {
         StringBuilder sb = new StringBuilder();
-        sb.append("#CHR	POS	REF	ALT	INFO	FORMAT");
+        sb.append("#CHR\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT");
         for (int i = 0; i < taxaNames.length; i++) {
             sb.append("\t").append(taxaNames[i]);
         }
@@ -903,7 +903,7 @@ public class FastCallSNP {
 //************************************************************************************************************  
     
     public static void main (String[] args) {
-        new FastCallSNP (args[0]);
-        //new FastCallSNP (); //for test
+        //new FastCallSNP (args[0]);
+        new FastCallSNP (); //for test
     }
 }
