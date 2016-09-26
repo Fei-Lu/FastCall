@@ -35,4 +35,6 @@ https://sites.google.com/site/feilu0000/
 
 ##Citation
 
-Coming soon...
+Cassava HapMap: Managing genetic load in a clonal crop species
+Punna Ramu, Williams Esuma, Robert Kawuki, Ismail Y Rabbi, Chiedozie Egesi, Jessen V Bredeson, Rebecca S Bart, Janu Verma, Edward S Buckler, Fei Lu. 
+bioRxiv 077123; doi: http://dx.doi.org/10.1101/077123
