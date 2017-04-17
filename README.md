@@ -35,6 +35,4 @@ https://sites.google.com/site/feilu0000/
 
 ##Citation
 
-Cassava HapMap: Managing genetic load in a clonal crop species
-Punna Ramu, Williams Esuma, Robert Kawuki, Ismail Y Rabbi, Chiedozie Egesi, Jessen V Bredeson, Rebecca S Bart, Janu Verma, Edward S Buckler, Fei Lu. 
-bioRxiv 077123; doi: http://dx.doi.org/10.1101/077123
+Punna Ramu, Williams Esuma, Robert Kawuki, Ismail Y Rabbi, Chiedozie Egesi, Jessen V Bredeson, Rebecca S Bart, Janu Verma, Edward S Buckler, Fei Lu (Corresponding author). (2017). Cassava haplotype map highlights fixation of deleterious mutations during clonal propagation. Nature Genetics. doi: 10.1038/ng.3845
