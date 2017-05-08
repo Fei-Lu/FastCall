@@ -903,7 +903,7 @@ public class FastCallSNP {
 //************************************************************************************************************  
     
     public static void main (String[] args) {
-        //new FastCallSNP (args[0]);
-        new FastCallSNP (); //for test
+        new FastCallSNP (args[0]);
+        //new FastCallSNP (); //for test
     }
 }
