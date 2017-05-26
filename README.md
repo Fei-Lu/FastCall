@@ -29,10 +29,12 @@ The parameter file is in the released java package. More details of usage are in
 
 Fei Lu
 
-dr.lufei@gmail.com
+flu@genetics.ac.cn; dr.lufei@gmail.com
 
 https://sites.google.com/site/feilu0000/
 
+http://plantgeneticslab.weebly.com/
+
 ## Citation
 
-Punna Ramu, Williams Esuma, Robert Kawuki, Ismail Y Rabbi, Chiedozie Egesi, Jessen V Bredeson, Rebecca S Bart, Janu Verma, Edward S Buckler, Fei Lu. (2017). Cassava haplotype map highlights fixation of deleterious mutations during clonal propagation. Nature Genetics. doi: 10.1038/ng.3845
+[Punna Ramu, Williams Esuma, Robert Kawuki, Ismail Y Rabbi, Chiedozie Egesi, Jessen V Bredeson, Rebecca S Bart, Janu Verma, Edward S Buckler, Fei Lu. (2017). Cassava haplotype map highlights fixation of deleterious mutations during clonal propagation. Nature Genetics. doi: 10.1038/ng.3845!](https://www.nature.com/ng/journal/vaop/ncurrent/full/ng.3845.html)
