@@ -74,8 +74,8 @@ public class FastCallSNP {
             String temp = null;
             boolean ifOut = false;
             if (!(temp = br.readLine()).equals("Author: Fei Lu")) ifOut = true;
-            if (!(temp = br.readLine()).equals("Email: fl262@cornell.edu; dr.lufei@gmail.com")) ifOut = true;
-            if (!(temp = br.readLine()).equals("Homepage: https://sites.google.com/site/feilu0000/")) ifOut = true;
+            if (!(temp = br.readLine()).equals("Email: flu@genetics.ac.cn; dr.lufei@gmail.com")) ifOut = true;
+            if (!(temp = br.readLine()).equals("Homepage: https://plantgeneticslab.weebly.com/")) ifOut = true;
             if (ifOut) {
                 System.out.println("Thanks for using FastCall.");
                 System.out.println("Please keep the authorship in the parameter file. Program stops.");

@@ -1,6 +1,6 @@
 Author: Fei Lu
-Email: fl262@cornell.edu; dr.lufei@gmail.com
-Homepage: https://sites.google.com/site/feilu0000/
+Email: flu@genetics.ac.cn; dr.lufei@gmail.com
+Homepage: https://plantgeneticslab.weebly.com/
 
 #This WGS SNP discovery pipeline are designed for both heterozygous and inbred species, especially the depth is high (e.g. >10X each taxon).
 #To run and pipeline, the machine should have Java 8 and samtools installed. The lib directory should stay with FastCall.jar in the same folder. Command (e.g.): java -Xmx200g -jar FastCall.jar parameter.txt > log.txt &
