@@ -13,11 +13,6 @@ Samtools
 
 http://samtools.sourceforge.net/
 
-
-## Release
-
-https://drive.google.com/open?id=0BzXwMgmlHJ3JbVQyc0JSMmhyQXc
-
 ## Usage
 
 From linux command line:
