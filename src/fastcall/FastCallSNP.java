@@ -9,11 +9,8 @@ import static cern.jet.math.Arithmetic.factorial;
 import gnu.trove.list.array.TByteArrayList;
 import gnu.trove.set.hash.TByteHashSet;
 import gnu.trove.set.hash.TIntHashSet;
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileReader;
-import java.io.StringReader;
+
+import java.io.*;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -37,12 +34,16 @@ public class FastCallSNP {
     int[] chroms = null;
     int[] chromLength = null;
     String[] taxaNames = null;
+    double[] taxaCoverage = null;
     String[] bamPaths = null;
     HashMap<String, String[]> taxaBamPathMap = null;
+    HashMap<String, Double> taxaCoverageMap = null;
     HashMap<String, String> bamPathPileupPathMap = null;
     ConcurrentHashMap<Integer, Double> factorialMap = new ConcurrentHashMap();
     int maxFactorial = 150;
     Fasta genomeFa = null;
+    
+    String[] baseS = {"A", "C", "G", "T"};
     //A, C, G, T
     byte[] bases = {65, 67, 71, 84};
     //D, I
@@ -57,12 +58,7 @@ public class FastCallSNP {
     double segregationPValueThresh = 0.001;
     double sequencingErrorRate = 0.1;
     
-    
-    public FastCallSNP () {
-        this.creatFactorialMap();
-        this.localTest(1);
-    }
-    
+
     public FastCallSNP (String parameterFileS) {
         this.callSNP(parameterFileS);
     }
@@ -93,10 +89,26 @@ public class FastCallSNP {
         String referenceFileS = pLineList.get(0);
         String bamDirS = pLineList.get(1);
         String taxaBamMapFileS = pLineList.get(2);
-        int currentChr = Integer.valueOf(pLineList.get(3));
+        int currentChr = Integer.MIN_VALUE;
+        int regionStart = Integer.MIN_VALUE;
+        int regionEnd = Integer.MIN_VALUE;
+        if (pLineList.get(3).contains(":")) {
+            String[] temp = pLineList.get(3).split(":");
+            currentChr = Integer.valueOf(temp[0]);
+            temp = temp[1].split(",");
+            regionStart = Integer.valueOf(temp[0]);
+            regionEnd = Integer.valueOf(temp[1]);
+        }
+        else {
+            currentChr = Integer.valueOf(pLineList.get(3));
+        }
         String vcfDirS = pLineList.get(4);
         
+        long start = System.nanoTime();
+        System.out.println("Reading reference genome from "+ referenceFileS);
         genomeFa = new Fasta(referenceFileS);
+        System.out.println("Reading reference genome took " + String.format("%.2f", Benchmark.getTimeSpanSeconds(start)) + "s");
+
         genomeFa.sortRecordByNameValue();
         chroms = new int[genomeFa.getSeqNumber()];
         chromLength = new int[genomeFa.getSeqNumber()];
@@ -113,17 +125,37 @@ public class FastCallSNP {
         this.updateTaxaBamPathMap(bams);
         this.creatPileupMap(pileupDirS);
         this.creatFactorialMap();
-        this.callSNPByChromosome(currentChr, referenceFileS, vcfDirS);
+        this.callSNPByChromosome(currentChr, regionStart, regionEnd, referenceFileS, vcfDirS);
+        File[] pileupFs = new File(pileupDirS).listFiles();
+        for (int i = 0; i < pileupFs.length; i++) pileupFs[i].delete();
         System.out.println("Variant calling completed");
     }
     
-    private void callSNPByChromosome (int currentChr, String referenceFileS, String vcfDirS) {
+    private void callSNPByChromosome (int currentChr, int rStart, int rEnd, String referenceFileS, String vcfDirS) {
         int chrIndex = Arrays.binarySearch(chroms, currentChr);
         String chrSeq = genomeFa.getSeq(chrIndex).toUpperCase();
-        int regionStart = 1;
-        int regionEnd = chrSeq.length();
+        int regionStart = Integer.MIN_VALUE;
+        int regionEnd = Integer.MIN_VALUE;
+        if (rStart == Integer.MIN_VALUE) {
+            regionStart = 1;
+            regionEnd = chrSeq.length();
+        }
+        else {
+            if (rEnd > chrSeq.length() || rStart < 1) {
+                System.out.println("Chromosome/region setting issues. Program quits");
+                System.exit(0);
+            }
+            else if (rEnd <= rStart) {
+                System.out.println("Chromosome/region setting issues. Program quits");
+                System.exit(0);
+            }
+            else {
+                regionStart = rStart;
+                regionEnd = rEnd;
+            }
+        }
         this.performPileup(currentChr, regionStart, regionEnd, referenceFileS);
-        String outfileS = "chr"+FStringUtils.getNDigitNumber(3, currentChr)+".VCF.txt";
+        String outfileS = "chr"+FStringUtils.getNDigitNumber(3, currentChr)+".vcf";
         outfileS = new File (vcfDirS, outfileS).getAbsolutePath();
         int[][] binBound = this.creatBins(currentChr, binSize, regionStart, regionEnd);
         try {
@@ -173,15 +205,30 @@ public class FastCallSNP {
                 
             }
             else {
-                String vcfStr = this.getVCFString(base[index], depth[index], currentChr, position, refBase);
+                //String vcfStr = this.getVCFStringV1(base[index], depth[index], currentChr, position, refBase);
+                String vcfStr = this.getVCFStringV2(base[index], depth[index], currentChr, position, refBase);
                 if (vcfStr != null) {
-                    posVCFMap.put(position, this.getVCFString(base[index], depth[index], currentChr, position, refBase));
+                    posVCFMap.put(position, this.getVCFStringV1(base[index], depth[index], currentChr, position, refBase));
                 }
             }
         });
     }
     
-    private String getVCFString (String[] base, int[] depth, int currentChr, int position, byte refBase) {
+    /**
+     * For mixed depth sequencing samples
+     * @param base
+     * @param depth
+     * @param currentChr
+     * @param position
+     * @param refBase
+     * @return 
+     */
+    private String getVCFStringV2 (String[] base, int[] depth, int currentChr, int position, byte refBase) {
+        int totalDepth = 0;
+        for (int i = 0; i < depth.length; i++) {
+            totalDepth+=depth[i];
+        }
+        if (totalDepth == 0) return null;
         TByteArrayList bList;
         boolean ifRecordedDeletion = false;
         TIntHashSet insertionLengthSet = new TIntHashSet();
@@ -269,7 +316,7 @@ public class FastCallSNP {
                     bList.add(refBase);
                     ifRecordedDeletion = true;
                 }
-                //N, n, $, >, <
+                //N, n, $, >, <, |
                 else {
                     //do nothing
                 }
@@ -288,11 +335,7 @@ public class FastCallSNP {
             }
             refDepth[i] = depth[i] - altSum;
         }
-        int totalDepth = 0;
-        for (int i = 0; i < depth.length; i++) {
-            totalDepth+=depth[i];
-        }
-        
+             
         int[] indelTypeCount = new int[2];
         indelTypeCount[0] = deletionLengthSet.size();
         indelTypeCount[1] = insertionLengthSet.size();
@@ -304,8 +347,8 @@ public class FastCallSNP {
         
         //****************************Filter2 Depth_ratio_test*****************************************
         //In any individual, alt allele show up < 2 times, ignore
-        //In any individual, alt allele show up 2 times when 2 < depth < 5. Pick up
-        //In any individual, alt allele show up > individualDepthRatioThresh, when depth >= 5. Pick up
+        //In any individual, depth > 0.2 * coverage and depth < 2*coverage. Pick up
+        //In any individual, alt allele show up > individualDepthRatioThresh. Pick up
         //When depth is low, tend to have assembly errors, LTR
         
         TByteHashSet altAlleleSet = new TByteHashSet();
@@ -313,12 +356,10 @@ public class FastCallSNP {
             if (possibleAllele[i] == refBase) continue;
             for (int j = 0; j < pAlleleCount.length; j++) {
                 if (depth[j] < 2) {}
-                else if (depth[j] < 5) {
-                    if (pAlleleCount[j][i] >=2) {
-                        altAlleleSet.add(this.possibleAllele[i]);
-                    }
-                }
                 else {
+                    double r = depth[j]/this.taxaCoverage[j];
+                    if (r < 0.2) continue;
+                    if (r > 3) continue;
                     if ((double)pAlleleCount[j][i]/depth[j] > this.individualDepthRatioThresh) {
                         altAlleleSet.add(this.possibleAllele[i]);
                     }
@@ -464,7 +505,9 @@ public class FastCallSNP {
                     b = bams[i];
                     for (int j = 0; j < lines.size(); j++) {
                         List<String> split = lines.get(j);                 
-                        if (split.get(2).startsWith("N") || split.get(2).startsWith("n")) continue;
+                        //if (split.get(2).startsWith("N") || split.get(2).startsWith("n")) continue;
+                        String refB = split.get(2);
+                        if (Arrays.binarySearch(baseS, refB) < 0) continue;
                         int siteIndex = Integer.valueOf(split.get(1)) - startPos;
                         depth[siteIndex][taxaIndex]+=Integer.valueOf(split.get(3));
                         baseSb[siteIndex][taxaIndex].append(split.get(4));
@@ -478,6 +521,267 @@ public class FastCallSNP {
                 System.exit(1);
             }
         });
+    }
+    
+    /**
+     * For high depth sequencing samples
+     * @param base
+     * @param depth
+     * @param currentChr
+     * @param position
+     * @param refBase
+     * @return 
+     */
+    private String getVCFStringV1 (String[] base, int[] depth, int currentChr, int position, byte refBase) {
+        int totalDepth = 0;
+        for (int i = 0; i < depth.length; i++) {
+            totalDepth+=depth[i];
+        }
+        if (totalDepth == 0) return null;
+        TByteArrayList bList;
+        boolean ifRecordedDeletion = false;
+        TIntHashSet insertionLengthSet = new TIntHashSet();
+        TIntHashSet deletionLengthSet = new TIntHashSet();
+        int[][] pAlleleCount = new int[base.length][this.possibleAllele.length];
+        int[] refDepth = new int[base.length];
+        for (int i = 0; i < base.length; i++) {
+            bList = new TByteArrayList();
+            byte[] ba = base[i].getBytes();
+            for (int j = 0; j < ba.length; j++) {
+                if (ba[j] == '.') {
+                    bList.add(refBase);
+                }
+                else if (ba[j] == ',') {
+                    bList.add(refBase);
+                }
+                else if (ba[j] == 'A') {
+                    bList.add((byte)65);
+                }
+                else if (ba[j] == 'a') {
+                    bList.add((byte)65);
+                }
+                else if (ba[j] == 'C') {
+                    bList.add((byte)67);
+                }
+                else if (ba[j] == 'c') {
+                    bList.add((byte)67);
+                }
+                else if (ba[j] == 'G') {
+                    bList.add((byte)71);
+                }
+                else if (ba[j] == 'g') {
+                    bList.add((byte)71);
+                }
+                else if (ba[j] == 'T') {
+                    bList.add((byte)84);
+                }
+                else if (ba[j] == 't') {
+                    bList.add((byte)84);
+                }
+                else if (ba[j] == '+') {
+                    int endIndex = j+2;
+                    for (int k = j+1; k < ba.length; k++) {
+                        if (ba[k] > 57) {
+                            endIndex = k;
+                            break;
+                        }
+                    }
+                    StringBuilder sb = new StringBuilder();
+                    for (int k = j+1; k < endIndex; k++) {
+                        sb.append((char)ba[k]);
+                    }
+                    int length = Integer.valueOf(sb.toString());
+                    insertionLengthSet.add(length);
+                    j+=sb.length();
+                    j+=length;
+                    if (ba[j-1] == '.' || ba[j-1] == ',') {
+                        bList.add((byte)73);
+                    }                   
+                }
+                else if (ba[j] == '-') {
+                    int endIndex = j+2;
+                    for (int k = j+1; k < ba.length; k++) {
+                        if (ba[k] > 57) {
+                            endIndex = k;
+                            break;
+                        }
+                    }
+                    StringBuilder sb = new StringBuilder();
+                    for (int k = j+1; k < endIndex; k++) {
+                        sb.append((char)ba[k]);
+                    }
+                    int length = Integer.valueOf(sb.toString());
+                    deletionLengthSet.add(length);
+                    j+=sb.length();
+                    j+=length;
+                    if (ba[j-1] == '.' || ba[j-1] == ',') {
+                        bList.add((byte)68);
+                    }
+                }
+                else if (ba[j] == '^') {
+                    j++;
+                }
+                else if (ba[j] == '*') {
+                    bList.add(refBase);
+                    ifRecordedDeletion = true;
+                }
+                //N, n, $, >, <, |
+                else {
+                    //do nothing
+                }
+            }
+            byte[] taxonBase = bList.toArray();
+            for (int j = 0; j < taxonBase.length; j++) {
+                int index = Arrays.binarySearch(this.possibleAllele, taxonBase[j]);
+                pAlleleCount[i][index]++;
+            }
+            int altSum = 0;
+            for (int j = 0; j < pAlleleCount[i].length; j++) {
+                if (this.possibleAllele[j] == refBase) continue;
+//                if (this.possibleAllele[j] == 68) continue;
+//                if (this.possibleAllele[j] == 73) continue;
+                altSum+=pAlleleCount[i][j];
+            }
+            refDepth[i] = depth[i] - altSum;
+        }
+             
+        int[] indelTypeCount = new int[2];
+        indelTypeCount[0] = deletionLengthSet.size();
+        indelTypeCount[1] = insertionLengthSet.size();
+        
+        //****************************Filter1 IndelFilter*****************************************
+        //Too many indels usually means mis-alignment
+        if (indelTypeCount[0]+indelTypeCount[1] > 1) return null;
+        //=======================================Filter1=====================================================
+        
+        //****************************Filter2 Depth_ratio_test*****************************************
+        //In any individual, alt allele show up < 2 times, ignore
+        //In any individual, alt allele show up 2 times when 2 < depth < 5. Pick up
+        //In any individual, alt allele show up > individualDepthRatioThresh, when depth >= 5. Pick up
+        //When depth is low, tend to have assembly errors, LTR
+        
+        TByteHashSet altAlleleSet = new TByteHashSet();
+        for (int i = 0; i < pAlleleCount[0].length; i++) {
+            if (possibleAllele[i] == refBase) continue;
+            for (int j = 0; j < pAlleleCount.length; j++) {
+                if (depth[j] < 2) {}
+                else if (depth[j] < 5) {
+                    if (pAlleleCount[j][i] >=2) {
+                        altAlleleSet.add(this.possibleAllele[i]);
+                    }
+                }
+                else {
+                    if ((double)pAlleleCount[j][i]/depth[j] > this.individualDepthRatioThresh) {
+                        altAlleleSet.add(this.possibleAllele[i]);
+                    }
+                }
+            }
+        }
+        byte[] altAllele = altAlleleSet.toArray();
+        if (altAllele.length == 0) return null;
+        Arrays.sort(altAllele);
+        //=======================================Filter2=====================================================  
+        
+        
+        int[] altAllele2PAlleleIndex = new int[altAllele.length];
+        for (int i = 0; i < this.possibleAllele.length; i++) {
+            int index = Arrays.binarySearch(altAllele, this.possibleAllele[i]);
+            if (index < 0) continue;
+            altAllele2PAlleleIndex[index] = i;
+        }   
+        int[] altAlleleTotalDepth = new int[altAllele.length];
+        for (int i = 0; i < altAllele.length; i++) {
+            for (int j = 0; j < base.length; j++) {
+                altAlleleTotalDepth[i]+=pAlleleCount[j][altAllele2PAlleleIndex[i]];
+            }
+        }
+        int[] altAlleleDepthDesendingIndex = FArrayUtils.getIndexByDescendingValue(altAlleleTotalDepth);
+        int refTotalDepth = 0;
+        for (int i = 0; i < refDepth.length; i++) refTotalDepth+=refDepth[i];
+        
+        //****************************Filter3 third_allele_test************************************************
+        //individual should not have the third allele
+        if (altAllele.length > 1) {
+            for (int i = 0; i < base.length; i++) {
+                int[] tempCnt = new int[altAllele.length];
+                for (int j = 0; j < altAllele.length; j++) {
+                    tempCnt[j] = pAlleleCount[i][altAllele2PAlleleIndex[j]];
+                }
+                int sum = refDepth[i];
+                double[] v = new double[altAllele.length+1];
+                for (int j = 0; j < tempCnt.length; j++) v[j] = (double)tempCnt[j]/sum;
+                v[v.length-1] = (double)refDepth[i]/sum;
+                Arrays.sort(v);
+                if (v[v.length-3] > individualThirdAlleleRatioThresh) return null;
+            }
+        }
+        //===========================Filter3=========================================================
+        
+        //****************************Filter4 Segregation_test*****************************************
+        long[] observed = new long[base.length];
+        double[] expected = new double[base.length];
+        double[] segregationP = new double[altAllele.length];
+        ChiSquareTest ct = new ChiSquareTest();
+        int cnt = 0;
+        for (int i = 0; i < altAllele.length; i++) {
+            double r = (double)altAlleleTotalDepth[i]/(refTotalDepth+altAlleleTotalDepth[i]);
+            for (int j = 0; j < base.length; j++) {
+                observed[j] = pAlleleCount[j][altAllele2PAlleleIndex[i]];
+                expected[j] = r;
+            }
+            segregationP[i] = ct.chiSquareTest(expected, observed);
+            if (segregationP[i] > this.segregationPValueThresh) cnt++;
+        }
+        if (cnt == altAllele.length) return null;
+       //===========================Filter4=========================================================
+        
+        int nonMissingCnt = 0;
+        int[] refAndAllelePresence = new int[altAllele.length+1];
+        for (int i = 0; i < base.length; i++) {
+            if (refDepth[i] != 0) {
+                nonMissingCnt++;
+                refAndAllelePresence[0]++;
+            }
+            else {
+                for (int j = 0; j < altAllele.length; j++) {
+                    if (pAlleleCount[i][altAllele2PAlleleIndex[j]] != 0) {
+                        nonMissingCnt++;
+                        break;
+                    }
+                }
+            }
+            for (int j = 0; j < altAllele.length; j++) {
+                if (pAlleleCount[i][altAllele2PAlleleIndex[j]] != 0) {
+                   refAndAllelePresence[j+1]++;
+                }
+            }
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append(currentChr).append("\t").append(position).append("\t.\t").append((char)refBase).append("\t");
+        for (int i = 0; i < altAllele.length; i++) sb.append(String.valueOf((char)altAllele[altAlleleDepthDesendingIndex[i]])).append(",");
+        sb.deleteCharAt(sb.length()-1);
+        sb.append("\t.\t.\t").append("DP=").append(totalDepth).append(";AD=").append(refTotalDepth);
+        for (int i = 0; i < altAllele.length; i++) sb.append(",").append(altAlleleTotalDepth[altAlleleDepthDesendingIndex[i]]);
+        sb.append(";NZ=").append(nonMissingCnt).append(";AP=");
+        for (int i = 0; i < refAndAllelePresence.length; i++) sb.append(refAndAllelePresence[i]).append(",");
+        sb.deleteCharAt(sb.length()-1);
+        sb.append(";PV=");
+        for (int i = 0; i < altAllele.length; i++) sb.append(segregationP[i]).append(",");
+        sb.deleteCharAt(sb.length()-1);
+        sb.append(";DI=");
+        for (int i = 0; i < indelTypeCount.length; i++) sb.append(indelTypeCount[i]).append(",");
+        sb.deleteCharAt(sb.length()-1);
+        sb.append("\t").append("GT:AD:PL");
+        
+        for (int i = 0; i < base.length; i++) {
+            int[] dep = new int[altAllele.length+1];
+            dep[0] = refDepth[i];
+            for (int j = 0; j < altAllele.length; j++) {
+                dep[j+1] = pAlleleCount[i][altAllele2PAlleleIndex[altAlleleDepthDesendingIndex[j]]];
+            }
+            sb.append("\t").append(this.getGenotype(dep));
+        }
+        return sb.toString();
     }
     
     private int[][] getPopulatedDepthArray (int startPos, int endPos) {
@@ -599,9 +903,15 @@ public class FastCallSNP {
             sb.append("samtools mpileup -A -B -q 30 -Q 10 -f ").append(referenceFileS).append(" ").append(bamFileS).append(" -r ");
             sb.append(currentChr).append(":").append(startPos).append("-").append(endPos).append(" -o ").append(pileupFileS);
             String command = sb.toString();
+            //System.out.println(command);
             try {
                 Runtime rt = Runtime.getRuntime();
                 Process p = rt.exec(command);
+//                BufferedReader br = new BufferedReader(new InputStreamReader(p.getErrorStream()));
+//                String temp = null;
+//                while ((temp = br.readLine()) != null) {
+//                    System.out.println(temp);
+//                }
                 p.waitFor();
             }
             catch (Exception e) {
@@ -611,7 +921,7 @@ public class FastCallSNP {
             int cnt = counter.intValue();
             if (cnt%10 == 0) System.out.println("Pileuped " + String.valueOf(cnt) + " bam files. Total: " + String.valueOf(this.bamPaths.length));
         });
-        System.out.println("Pileup is finished. Time took " + Benchmark.getTimeSpanMinutes(timeStart) + " mins");
+        System.out.println("Pileup is finished. Time took " + String.format("%.2f", Benchmark.getTimeSpanMinutes(timeStart)) + " mins");
     }
      
     private int[][] creatBins (int currentChr, int binSize, int regionStart, int regionEnd) {
@@ -628,7 +938,7 @@ public class FastCallSNP {
     
     private String getVCFHeader () {
         StringBuilder sb = new StringBuilder();
-        sb.append("#CHR\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT");
+        sb.append("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT");
         for (int i = 0; i < taxaNames.length; i++) {
             sb.append("\t").append(taxaNames[i]);
         }
@@ -740,6 +1050,10 @@ public class FastCallSNP {
                 pathList.add(path);
                 existingTaxaSet.add(taxaNames[i]);
             }
+            if (bamPathList.size() < bamNames.length) {
+                System.out.println(taxaNames[i] + "does not have all specified BAM files. Program quits");
+                System.exit(0);
+            }
             if (bamPathList.isEmpty()) continue;
             bamNames = bamPathList.toArray(new String[bamPathList.size()]);
             Arrays.sort(bamNames);
@@ -750,6 +1064,10 @@ public class FastCallSNP {
         Arrays.sort(updatedTaxaNames);
         taxaNames = updatedTaxaNames;
         taxaBamPathMap = updatedTaxaBamMap;
+        this.taxaCoverage = new double[taxaNames.length];
+        for (int i = 0; i < taxaCoverage.length; i++) {
+            taxaCoverage[i] = this.taxaCoverageMap.get(taxaNames[i]);
+        }
         this.bamPaths = pathList.toArray(new String[pathList.size()]);
         Arrays.sort(bamPaths);
         System.out.println("Actual taxa number:\t"+String.valueOf(taxaNames.length));
@@ -759,18 +1077,20 @@ public class FastCallSNP {
     
     private void getTaxaBamMap (String taxaBamMapFileS) {
         this.taxaBamPathMap = new HashMap();
+        this.taxaCoverageMap = new HashMap();
         try {
             BufferedReader br = IoUtils.getTextReader(taxaBamMapFileS);
-            String temp;
+            String temp = br.readLine();
             ArrayList<String> taxaList = new ArrayList();
             int nBam = 0;
             while ((temp = br.readLine()) != null) {
                 String[] tem = temp.split("\t");
                 taxaList.add(tem[0]);
-                String[] bams = new String[tem.length-1] ;
-                for (int i = 0; i < bams.length; i++) bams[i] = tem[i+1];
+                String[] bams = new String[tem.length-2] ;
+                for (int i = 0; i < bams.length; i++) bams[i] = tem[i+2];
                 Arrays.sort(bams);
                 taxaBamPathMap.put(tem[0], bams);
+                taxaCoverageMap.put(tem[0], Double.valueOf(tem[1]));
                 nBam+=bams.length;
             }
             taxaNames = taxaList.toArray(new String[taxaList.size()]);
@@ -785,69 +1105,6 @@ public class FastCallSNP {
         }
     }
     
-    //********************************Local test section***********************************   
-    public void localTest (int currentChr) {
-        String taxaBamMapFileS = "M:\\pipelineTest\\cassava\\wgs\\snpDiscovery\\GenotypingPipelineTest\\source\\taxaBamMap.txt";
-        String pileupDirS = "M:\\pipelineTest\\cassava\\wgs\\snpDiscovery\\GenotypingPipelineTest\\pileup\\";
-        String vcfDirS = "M:\\pipelineTest\\cassava\\wgs\\snpDiscovery\\GenotypingPipelineTest\\vcfFast\\";
-        String bamList = "M:\\pipelineTest\\cassava\\wgs\\snpDiscovery\\GenotypingPipelineTest\\bam.list.txt" ;
-        String referenceFileS = "M:\\Database\\cassavaReference\\genome\\Manihot esculenta\\cassavaV6_chr01.fa";
-        int startPos = 1;
-        int endPos = 100000;
-        int binSize = 10000;
-        Fasta f = new Fasta(referenceFileS);
-        String chrSeq = f.getSeq(0).toUpperCase();
-        this.getTaxaBamMap(taxaBamMapFileS);
-        this.updateTaxaBamPathMap(bamList);
-        this.creatPileupMap(pileupDirS);
-        this.callSNPByChromosomeTest(currentChr, vcfDirS, referenceFileS, chrSeq, startPos, endPos, binSize);
-    }
-    
-    private void callSNPByChromosomeTest (int currentChr, String vcfDirS, String referenceFileS, String chrSeq, int startPos, int endPos, int binSize) {
-        int regionStart = startPos;
-        int regionEnd = endPos;
-        
-        String outfileS = "chr"+FStringUtils.getNDigitNumber(3, currentChr)+".VCF.txt";
-        outfileS = new File (vcfDirS, outfileS).getAbsolutePath();
-        int[][] binBound = this.creatBins(currentChr, binSize, regionStart, regionEnd);
-        try {
-            HashMap<String, BufferedReader> bamPathPileupReaderMap = this.getBamPathPileupReaderMap();
-            ConcurrentHashMap<BufferedReader, List<String>> readerRemainderMap = this.getReaderRemainderMap(bamPathPileupReaderMap);
-            BufferedWriter bw = IoUtils.getTextWriter(outfileS);
-            bw.write(this.getAnnotation(referenceFileS));
-            bw.write(this.getVCFHeader());
-            bw.newLine();
-            for (int i = 0; i < binBound.length; i++) {
-                long startTimePoint = System.nanoTime();
-                int binStart = binBound[i][0];
-                int binEnd = binBound[i][1];
-                ConcurrentHashMap<String, List<List<String>>> bamPileupResultMap = this.getBamPileupResultMap(currentChr, binStart, binEnd, bamPathPileupReaderMap, readerRemainderMap);
-                StringBuilder[][] baseSb = this.getPopulateBaseBuilder(binStart, binEnd);
-                int[][] depth = this.getPopulatedDepthArray(binStart, binEnd);
-                this.fillDepthAndBase(bamPileupResultMap, baseSb, depth, binStart);
-                String[][] base = this.getBaseMatrix(baseSb);
-                ArrayList<Integer> positionList = this.getPositionList(binStart, binEnd);
-                ConcurrentHashMap<Integer, String> posVCFMap = new ConcurrentHashMap((int)((binEnd - binStart + 1)*1.5));
-                this.calculateVCF(posVCFMap, positionList, currentChr, binStart, chrSeq, depth, base);
-                for (int j = 0; j < positionList.size(); j++) {
-                    String vcfStr = posVCFMap.get(positionList.get(j));
-                    if (vcfStr == null) continue;
-                    bw.write(vcfStr);
-                    bw.newLine();
-                }
-                StringBuilder sb = new StringBuilder();
-                sb.append("Bin from ").append(binStart).append(" to ").append(binEnd).append(" is finished. Took ").append(Benchmark.getTimeSpanSeconds(startTimePoint)).append(" seconds. Memory used: ").append(Benchmark.getUsedMemoryGb()).append(" Gb");
-                System.out.println(sb.toString());
-            }
-            bw.flush();
-            bw.close();
-        }
-        catch (Exception e) {
-            e.printStackTrace();
-        }
-        System.out.println("Chromosome " + String.valueOf(currentChr) + " is finished. File written to " + outfileS + "\n");
-    }
-    
     private String getAnnotation (String referenceFileS) {
         StringBuilder sb = new StringBuilder();
         sb.append("##fileformat=VCFv4.1\n");
@@ -857,11 +1114,14 @@ public class FastCallSNP {
         sb.append("##fileDate=").append(S.split(" ")[0]).append("\n");
         sb.append("##reference=").append(referenceFileS).append("\n");
         sb.append("##INFO=<ID=DP,Number=1,Type=Integer,Description=\"").append("Total depth").append("\">\n");
-        sb.append("##INFO=<ID=AD,Number=2+,Type=Integer,Description=\"").append("Allele depth").append("\">\n");
+        sb.append("##INFO=<ID=AD,Number=2+,Type=Integer,Description=\"").append("Total allelelic depths in order listed starting with REF").append("\">\n");
         sb.append("##INFO=<ID=NZ,Number=1,Type=Integer,Description=\"").append("Number of individuals with alleles present").append("\">\n");
         sb.append("##INFO=<ID=AP,Number=2+,Type=Integer,Description=\"").append("Number of individuals in which an allele is present").append("\">\n");
         sb.append("##INFO=<ID=PV,Number=1+,Type=Float,Description=\"").append("Segreagation test P-Value of alternative alleles").append("\">\n");
         sb.append("##INFO=<ID=DI,Number=2,Type=Integer,Description=\"").append("Number of deletion and insertion type").append("\">\n");
+        sb.append("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"").append("Genotype").append("\">\n");
+        sb.append("##FORMAT=<ID=AD,Number=.,Type=Integer,Description=\"").append("Allelic depths for the reference and alternate alleles in the order listed").append("\">\n");
+        sb.append("##FORMAT=<ID=GL,Number=.,Type=Integer,Description=\"").append("Genotype likelihoods for 0/0, 0/1, 1/1, or 0/0, 0/1, 0/2, 1/1, 1/2, 2/2 if 2 alt alleles").append("\">\n");
         return sb.toString();
     }
     
@@ -904,6 +1164,5 @@ public class FastCallSNP {
     
     public static void main (String[] args) {
         new FastCallSNP (args[0]);
-        //new FastCallSNP (); //for test
     }
 }
