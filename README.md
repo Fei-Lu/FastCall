@@ -1,7 +1,7 @@
 # FastCall
 
 ## Overview
-Super fast variant caller for whole genome shotgun (WGS) sequencing data. It works for diploid species, including both inbreds and outcrossers.
+Super fast variant caller for whole genome shotgun (WGS) sequencing data. It works for species with disomic inheritance, including both inbreds and outcrossers.
 
 ## Prerequisites
 
