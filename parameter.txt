@@ -10,14 +10,12 @@ Homepage: https://plantgeneticslab.weebly.com/
 #Parameter1:	Reference genome file with an index file (.fai). The reference should be in FastA format. Chromosomes are labled as 1-based numbers (1,2,3,4,5...).
 /Users/feilu/Documents/database/wheat/reference/v1.0/ABD/abd_iwgscV1.fa
 
-#Parameter2:	Bam directory, where your bam files are
-/Users/feilu/Documents/analysisL/pipelineTest/fastCall2/source/bam/
-
-#Parameter3:	Taxa bam information file, including the info about what bams are included for each taxon
+#Parameter2:	Taxa bam information file, including the info about what bams are included for each taxon
 /Users/feilu/Documents/analysisL/pipelineTest/fastCall2/source/taxaBamMap.txt
 
-#Parameter4:	Chromosome or region on which genotyping will be performed (e.g. chromosome 1 is designated as 1. Region 1bp to 100000bp on chromosome 1 is 1:1,100000)
+#Parameter3:	Chromosome or region on which genotyping will be performed (e.g. chromosome 1 is designated as 1. Region 1bp to 100000bp on chromosome 1 is 1:1,100000)
 1
 
-#Parameter5:	VCF output directory
-/Users/feilu/Documents/analysisL/pipelineTest/fastCall2/vcf/
+#Parameter4:	VCF output directory
+/Users/feilu/Documents/analysisL/pipelineTest/fastCall2/vcf
+

@@ -87,22 +87,21 @@ public class FastCallSNP {
             e.printStackTrace();
         }
         String referenceFileS = pLineList.get(0);
-        String bamDirS = pLineList.get(1);
-        String taxaBamMapFileS = pLineList.get(2);
+        String taxaBamMapFileS = pLineList.get(1);
         int currentChr = Integer.MIN_VALUE;
         int regionStart = Integer.MIN_VALUE;
         int regionEnd = Integer.MIN_VALUE;
-        if (pLineList.get(3).contains(":")) {
-            String[] temp = pLineList.get(3).split(":");
+        if (pLineList.get(2).contains(":")) {
+            String[] temp = pLineList.get(2).split(":");
             currentChr = Integer.valueOf(temp[0]);
             temp = temp[1].split(",");
             regionStart = Integer.valueOf(temp[0]);
             regionEnd = Integer.valueOf(temp[1]);
         }
         else {
-            currentChr = Integer.valueOf(pLineList.get(3));
+            currentChr = Integer.valueOf(pLineList.get(2));
         }
-        String vcfDirS = pLineList.get(4);
+        String vcfDirS = pLineList.get(3);
         
         long start = System.nanoTime();
         System.out.println("Reading reference genome from "+ referenceFileS);
@@ -120,9 +119,6 @@ public class FastCallSNP {
         new File(pileupDirS).mkdir();
         new File(vcfDirS).mkdir();
         this.getTaxaBamMap(taxaBamMapFileS);
-        File[] bams = new File(bamDirS).listFiles();
-        Arrays.sort(bams);
-        this.updateTaxaBamPathMap(bams);
         this.creatPileupMap(pileupDirS);
         this.creatFactorialMap();
         this.callSNPByChromosome(currentChr, regionStart, regionEnd, referenceFileS, vcfDirS);
@@ -455,7 +451,7 @@ public class FastCallSNP {
         for (int i = 0; i < refAndAllelePresence.length; i++) sb.append(refAndAllelePresence[i]).append(",");
         sb.deleteCharAt(sb.length()-1);
         sb.append(";PV=");
-        for (int i = 0; i < altAllele.length; i++) sb.append(segregationP[i]).append(",");
+        for (int i = 0; i < altAllele.length; i++) sb.append(String.format("%.2e", segregationP[i])).append(",");
         sb.deleteCharAt(sb.length()-1);
         sb.append(";DI=");
         for (int i = 0; i < indelTypeCount.length; i++) sb.append(indelTypeCount[i]).append(",");
@@ -766,7 +762,7 @@ public class FastCallSNP {
         for (int i = 0; i < refAndAllelePresence.length; i++) sb.append(refAndAllelePresence[i]).append(",");
         sb.deleteCharAt(sb.length()-1);
         sb.append(";PV=");
-        for (int i = 0; i < altAllele.length; i++) sb.append(segregationP[i]).append(",");
+        for (int i = 0; i < altAllele.length; i++) sb.append(String.format("%.2e", segregationP[i])).append(",");
         sb.deleteCharAt(sb.length()-1);
         sb.append(";DI=");
         for (int i = 0; i < indelTypeCount.length; i++) sb.append(indelTypeCount[i]).append(",");
@@ -1082,12 +1078,16 @@ public class FastCallSNP {
             BufferedReader br = IoUtils.getTextReader(taxaBamMapFileS);
             String temp = br.readLine();
             ArrayList<String> taxaList = new ArrayList();
+            ArrayList<String> pathList = new ArrayList();
             int nBam = 0;
             while ((temp = br.readLine()) != null) {
                 String[] tem = temp.split("\t");
                 taxaList.add(tem[0]);
                 String[] bams = new String[tem.length-2] ;
-                for (int i = 0; i < bams.length; i++) bams[i] = tem[i+2];
+                for (int i = 0; i < bams.length; i++) {
+                    bams[i] = tem[i+2];
+                    pathList.add(bams[i]);
+                }
                 Arrays.sort(bams);
                 taxaBamPathMap.put(tem[0], bams);
                 taxaCoverageMap.put(tem[0], Double.valueOf(tem[1]));
@@ -1095,10 +1095,18 @@ public class FastCallSNP {
             }
             taxaNames = taxaList.toArray(new String[taxaList.size()]);
             Arrays.sort(taxaNames);
+            this.taxaCoverage = new double[taxaNames.length];
+            for (int i = 0; i < taxaCoverage.length; i++) {
+                taxaCoverage[i] = this.taxaCoverageMap.get(taxaNames[i]);
+            }
+            this.bamPaths = pathList.toArray(new String[pathList.size()]);
+            Arrays.sort(bamPaths);
             System.out.println("Created TaxaBamMap from" + taxaBamMapFileS);
             System.out.println("Taxa number:\t"+String.valueOf(taxaNames.length));
             System.out.println("Bam file number in TaxaBamMap:\t"+String.valueOf(nBam));
             System.out.println();
+            
+            
         }
         catch (Exception e) {
             e.printStackTrace();
@@ -1121,7 +1129,7 @@ public class FastCallSNP {
         sb.append("##INFO=<ID=DI,Number=2,Type=Integer,Description=\"").append("Number of deletion and insertion type").append("\">\n");
         sb.append("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"").append("Genotype").append("\">\n");
         sb.append("##FORMAT=<ID=AD,Number=.,Type=Integer,Description=\"").append("Allelic depths for the reference and alternate alleles in the order listed").append("\">\n");
-        sb.append("##FORMAT=<ID=GL,Number=.,Type=Integer,Description=\"").append("Genotype likelihoods for 0/0, 0/1, 1/1, or 0/0, 0/1, 0/2, 1/1, 1/2, 2/2 if 2 alt alleles").append("\">\n");
+        sb.append("##FORMAT=<ID=PL,Number=.,Type=Integer,Description=\"").append("Genotype likelihoods for 0/0, 0/1, 1/1, or 0/0, 0/1, 0/2, 1/1, 1/2, 2/2 if 2 alt alleles").append("\">\n");
         return sb.toString();
     }
     
