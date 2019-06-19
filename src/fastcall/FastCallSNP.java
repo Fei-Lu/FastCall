@@ -36,6 +36,7 @@ public class FastCallSNP {
     String[] taxaNames = null;
     double[] taxaCoverage = null;
     String[] bamPaths = null;
+    int threadsNum = 32;
     HashMap<String, String[]> taxaBamPathMap = null;
     HashMap<String, Double> taxaCoverageMap = null;
     HashMap<String, String> bamPathPileupPathMap = null;
@@ -102,7 +103,7 @@ public class FastCallSNP {
             currentChr = Integer.valueOf(pLineList.get(2));
         }
         String vcfDirS = pLineList.get(3);
-        
+        this.threadsNum = Integer.valueOf(pLineList.get(4));
         long start = System.nanoTime();
         System.out.println("Reading reference genome from "+ referenceFileS);
         genomeFa = new Fasta(referenceFileS);
@@ -122,8 +123,6 @@ public class FastCallSNP {
         this.creatPileupMap(pileupDirS);
         this.creatFactorialMap();
         this.callSNPByChromosome(currentChr, regionStart, regionEnd, referenceFileS, vcfDirS);
-        File[] pileupFs = new File(pileupDirS).listFiles();
-        for (int i = 0; i < pileupFs.length; i++) pileupFs[i].delete();
         System.out.println("Variant calling completed");
     }
     
@@ -891,32 +890,37 @@ public class FastCallSNP {
     private void performPileup (int currentChr, int startPos, int endPos, String referenceFileS) {
         System.out.println("Pileup is being performed on chromosome "+String.valueOf(currentChr)+" from "+String.valueOf(startPos)+" to "+String.valueOf(endPos));
         long timeStart = System.nanoTime();
-        List<String> bamList = Arrays.asList(bamPaths);
+        List<String> bamList = Arrays.asList(bamPaths);    
         LongAdder counter = new LongAdder();
-        bamList.parallelStream().forEach(bamFileS -> {
-            String pileupFileS = this.bamPathPileupPathMap.get(bamFileS);
-            StringBuilder sb = new StringBuilder();
-            sb.append("samtools mpileup -A -B -q 30 -Q 10 -f ").append(referenceFileS).append(" ").append(bamFileS).append(" -r ");
-            sb.append(currentChr).append(":").append(startPos).append("-").append(endPos).append(" -o ").append(pileupFileS);
-            String command = sb.toString();
-            //System.out.println(command);
-            try {
-                Runtime rt = Runtime.getRuntime();
-                Process p = rt.exec(command);
-//                BufferedReader br = new BufferedReader(new InputStreamReader(p.getErrorStream()));
-//                String temp = null;
-//                while ((temp = br.readLine()) != null) {
-//                    System.out.println(temp);
-//                }
-                p.waitFor();
-            }
-            catch (Exception e) {
-                e.printStackTrace();
-            }
-            counter.increment();
-            int cnt = counter.intValue();
-            if (cnt%10 == 0) System.out.println("Pileuped " + String.valueOf(cnt) + " bam files. Total: " + String.valueOf(this.bamPaths.length));
-        });
+        int[][] bounds = FArrayUtils.getSubsetsIndicesBySubsetSize(bamList.size(), this.threadsNum);
+        for (int i = 0; i < bounds.length; i++) {
+            List<String> subBamList = bamList.subList(bounds[i][0], bounds[i][1]);
+            subBamList.parallelStream().forEach(bamFileS -> {
+                String pileupFileS = this.bamPathPileupPathMap.get(bamFileS);
+                StringBuilder sb = new StringBuilder();
+                sb.append("samtools mpileup -A -B -q 30 -Q 10 -f ").append(referenceFileS).append(" ").append(bamFileS).append(" -r ");
+                sb.append(currentChr).append(":").append(startPos).append("-").append(endPos).append(" -o ").append(pileupFileS);
+                String command = sb.toString();
+                //System.out.println(command);
+                try {
+                    Runtime rt = Runtime.getRuntime();
+                    Process p = rt.exec(command);
+    //                BufferedReader br = new BufferedReader(new InputStreamReader(p.getErrorStream()));
+    //                String temp = null;
+    //                while ((temp = br.readLine()) != null) {
+    //                    System.out.println(temp);
+    //                }
+                    p.waitFor();
+                }
+                catch (Exception e) {
+                    e.printStackTrace();
+                }
+                counter.increment();
+                int cnt = counter.intValue();
+                if (cnt%10 == 0) System.out.println("Pileuped " + String.valueOf(cnt) + " bam files. Total: " + String.valueOf(this.bamPaths.length));
+            });
+        }
+        
         System.out.println("Pileup is finished. Time took " + String.format("%.2f", Benchmark.getTimeSpanMinutes(timeStart)) + " mins");
     }
      
@@ -1025,51 +1029,6 @@ public class FastCallSNP {
             }
         }
     }
-      
-    private void updateTaxaBamPathMap (File[] bams) {
-        String bamDirS = bams[0].getParent();
-        String[] existingBam = new String[bams.length];
-        for (int i = 0; i < bams.length; i++) existingBam[i] = bams[i].getName();
-        Arrays.sort(existingBam);
-        HashSet<String> existingTaxaSet = new HashSet();
-        HashMap<String, String[]> updatedTaxaBamMap = new HashMap();
-        int cnt = 0;
-        ArrayList<String> pathList = new ArrayList();
-        for (int i = 0; i < taxaNames.length; i++) {
-            String[] bamNames = taxaBamPathMap.get(taxaNames[i]);
-            ArrayList<String> bamPathList = new ArrayList();
-            for (int j = 0; j < bamNames.length; j++) {
-                int index = Arrays.binarySearch(existingBam, bamNames[j]);
-                if (index < 0) continue;
-                String path = new File(bamDirS,bamNames[j]).getAbsolutePath();
-                bamPathList.add(path);
-                pathList.add(path);
-                existingTaxaSet.add(taxaNames[i]);
-            }
-            if (bamPathList.size() < bamNames.length) {
-                System.out.println(taxaNames[i] + "does not have all specified BAM files. Program quits");
-                System.exit(0);
-            }
-            if (bamPathList.isEmpty()) continue;
-            bamNames = bamPathList.toArray(new String[bamPathList.size()]);
-            Arrays.sort(bamNames);
-            updatedTaxaBamMap.put(taxaNames[i], bamNames);
-            cnt+=bamNames.length;
-        }
-        String[] updatedTaxaNames = existingTaxaSet.toArray(new String[existingTaxaSet.size()]);
-        Arrays.sort(updatedTaxaNames);
-        taxaNames = updatedTaxaNames;
-        taxaBamPathMap = updatedTaxaBamMap;
-        this.taxaCoverage = new double[taxaNames.length];
-        for (int i = 0; i < taxaCoverage.length; i++) {
-            taxaCoverage[i] = this.taxaCoverageMap.get(taxaNames[i]);
-        }
-        this.bamPaths = pathList.toArray(new String[pathList.size()]);
-        Arrays.sort(bamPaths);
-        System.out.println("Actual taxa number:\t"+String.valueOf(taxaNames.length));
-        System.out.println("Actual bam file number:\t"+String.valueOf(cnt));
-        System.out.println();
-    }
     
     private void getTaxaBamMap (String taxaBamMapFileS) {
         this.taxaBamPathMap = new HashMap();
@@ -1095,6 +1054,11 @@ public class FastCallSNP {
             }
             taxaNames = taxaList.toArray(new String[taxaList.size()]);
             Arrays.sort(taxaNames);
+            HashSet<String> taxaSet = new HashSet(taxaList);
+            if (taxaSet.size() != taxaNames.length) {
+                System.out.println("Taxa names are not unique. Programs quits");
+                System.exit(0);
+            }
             this.taxaCoverage = new double[taxaNames.length];
             for (int i = 0; i < taxaCoverage.length; i++) {
                 taxaCoverage[i] = this.taxaCoverageMap.get(taxaNames[i]);
@@ -1105,8 +1069,6 @@ public class FastCallSNP {
             System.out.println("Taxa number:\t"+String.valueOf(taxaNames.length));
             System.out.println("Bam file number in TaxaBamMap:\t"+String.valueOf(nBam));
             System.out.println();
-            
-            
         }
         catch (Exception e) {
             e.printStackTrace();

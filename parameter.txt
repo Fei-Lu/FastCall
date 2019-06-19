@@ -19,3 +19,5 @@ Homepage: https://plantgeneticslab.weebly.com/
 #Parameter4:	VCF output directory
 /Users/feilu/Documents/analysisL/pipelineTest/fastCall2/vcf
 
+#Parameter5:	Number of threads for pileup
+32
