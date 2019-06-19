@@ -149,7 +149,7 @@ public class FastCallSNP {
                 regionEnd = rEnd;
             }
         }
-        this.performPileup(currentChr, regionStart, regionEnd, referenceFileS);
+        //this.performPileup(currentChr, regionStart, regionEnd, referenceFileS);
         String outfileS = "chr"+FStringUtils.getNDigitNumber(3, currentChr)+".vcf";
         outfileS = new File (vcfDirS, outfileS).getAbsolutePath();
         int[][] binBound = this.creatBins(currentChr, binSize, regionStart, regionEnd);
@@ -203,7 +203,7 @@ public class FastCallSNP {
                 //String vcfStr = this.getVCFStringV1(base[index], depth[index], currentChr, position, refBase);
                 String vcfStr = this.getVCFStringV2(base[index], depth[index], currentChr, position, refBase);
                 if (vcfStr != null) {
-                    posVCFMap.put(position, this.getVCFStringV1(base[index], depth[index], currentChr, position, refBase));
+                    posVCFMap.put(position, vcfStr);
                 }
             }
         });
