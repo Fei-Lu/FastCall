@@ -37,6 +37,7 @@ public class FastCallSNP {
     double[] taxaCoverage = null;
     String[] bamPaths = null;
     int threadsNum = 32;
+    int[][] bounds = null;
     HashMap<String, String[]> taxaBamPathMap = null;
     HashMap<String, Double> taxaCoverageMap = null;
     HashMap<String, String> bamPathPileupPathMap = null;
@@ -486,36 +487,40 @@ public class FastCallSNP {
     
     private void fillDepthAndBase (ConcurrentHashMap<String, List<List<String>>> bamPileupResultMap, StringBuilder[][] baseSb, int[][] depth, int startPos) {
         Set<Map.Entry<String, String[]>> entries = this.taxaBamPathMap.entrySet();
-        entries.parallelStream().forEach(e -> {
-            String taxa = e.getKey();
-            int taxaIndex = Arrays.binarySearch(this.taxaNames, taxa);
-            String[] bams = e.getValue();
-            
-            int count = 0;
-            String b = null;
-            try {
-                for (int i = 0; i < bams.length; i++) {
-                    List<List<String>> lines = bamPileupResultMap.get(bams[i]);
-                    count = lines.size();
-                    b = bams[i];
-                    for (int j = 0; j < lines.size(); j++) {
-                        List<String> split = lines.get(j);                 
-                        //if (split.get(2).startsWith("N") || split.get(2).startsWith("n")) continue;
-                        String refB = split.get(2);
-                        if (Arrays.binarySearch(baseS, refB) < 0) continue;
-                        int siteIndex = Integer.valueOf(split.get(1)) - startPos;
-                        depth[siteIndex][taxaIndex]+=Integer.valueOf(split.get(3));
-                        baseSb[siteIndex][taxaIndex].append(split.get(4));
+        List<Map.Entry<String,String[]>> entryList = new ArrayList(entries);
+        for (int k = 0; k < bounds.length; k++) {
+            List<Map.Entry<String,String[]>> subList = entryList.subList(bounds[k][0], bounds[k][1]);
+            subList.parallelStream().forEach(e -> {
+                String taxa = e.getKey();
+                int taxaIndex = Arrays.binarySearch(this.taxaNames, taxa);
+                String[] bams = e.getValue();
+
+                int count = 0;
+                String b = null;
+                try {
+                    for (int i = 0; i < bams.length; i++) {
+                        List<List<String>> lines = bamPileupResultMap.get(bams[i]);
+                        count = lines.size();
+                        b = bams[i];
+                        for (int j = 0; j < lines.size(); j++) {
+                            List<String> split = lines.get(j);                 
+                            //if (split.get(2).startsWith("N") || split.get(2).startsWith("n")) continue;
+                            String refB = split.get(2);
+                            if (Arrays.binarySearch(baseS, refB) < 0) continue;
+                            int siteIndex = Integer.valueOf(split.get(1)) - startPos;
+                            depth[siteIndex][taxaIndex]+=Integer.valueOf(split.get(3));
+                            baseSb[siteIndex][taxaIndex].append(split.get(4));
+                        }
                     }
                 }
-            }
-            catch (Exception ee) {
-                System.out.println(b);
-                System.out.println(count);
-                ee.printStackTrace();
-                System.exit(1);
-            }
-        });
+                catch (Exception ee) {
+                    System.out.println(b);
+                    System.out.println(count);
+                    ee.printStackTrace();
+                    System.exit(1);
+                }
+            });
+        }
     }
     
     /**
@@ -892,7 +897,6 @@ public class FastCallSNP {
         long timeStart = System.nanoTime();
         List<String> bamList = Arrays.asList(bamPaths);    
         LongAdder counter = new LongAdder();
-        int[][] bounds = FArrayUtils.getSubsetsIndicesBySubsetSize(bamList.size(), this.threadsNum);
         for (int i = 0; i < bounds.length; i++) {
             List<String> subBamList = bamList.subList(bounds[i][0], bounds[i][1]);
             subBamList.parallelStream().forEach(bamFileS -> {
@@ -1065,6 +1069,7 @@ public class FastCallSNP {
             }
             this.bamPaths = pathList.toArray(new String[pathList.size()]);
             Arrays.sort(bamPaths);
+            bounds = FArrayUtils.getSubsetsIndicesBySubsetSize(taxaNames.length, this.threadsNum);
             System.out.println("Created TaxaBamMap from" + taxaBamMapFileS);
             System.out.println("Taxa number:\t"+String.valueOf(taxaNames.length));
             System.out.println("Bam file number in TaxaBamMap:\t"+String.valueOf(nBam));
