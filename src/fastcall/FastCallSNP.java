@@ -38,6 +38,8 @@ public class FastCallSNP {
     String[] bamPaths = null;
     int threadsNum = 32;
     int[][] bounds = null;
+    HashMap<String, String> bamPathTaxamap = null;
+    int[] bamTaxaIndices = null;
     HashMap<String, String[]> taxaBamPathMap = null;
     HashMap<String, Double> taxaCoverageMap = null;
     HashMap<String, String> bamPathPileupPathMap = null;
@@ -123,8 +125,85 @@ public class FastCallSNP {
         this.getTaxaBamMap(taxaBamMapFileS);
         this.creatPileupMap(pileupDirS);
         this.creatFactorialMap();
-        this.callSNPByChromosome(currentChr, regionStart, regionEnd, referenceFileS, vcfDirS);
+        this.callSNPByChromosome2(currentChr, regionStart, regionEnd, referenceFileS, vcfDirS); //removeed all concurrenthashmap
+//        this.callSNPByChromosome(currentChr, regionStart, regionEnd, referenceFileS, vcfDirS);
         System.out.println("Variant calling completed");
+    }
+    
+    private void callSNPByChromosome2 (int currentChr, int rStart, int rEnd, String referenceFileS, String vcfDirS) {
+        int chrIndex = Arrays.binarySearch(chroms, currentChr);
+        String chrSeq = genomeFa.getSeq(chrIndex).toUpperCase();
+        int regionStart = Integer.MIN_VALUE;
+        int regionEnd = Integer.MIN_VALUE;
+        if (rStart == Integer.MIN_VALUE) {
+            regionStart = 1;
+            regionEnd = chrSeq.length();
+        }
+        else {
+            if (rEnd > chrSeq.length() || rStart < 1) {
+                System.out.println("Chromosome/region setting issues. Program quits");
+                System.exit(0);
+            }
+            else if (rEnd <= rStart) {
+                System.out.println("Chromosome/region setting issues. Program quits");
+                System.exit(0);
+            }
+            else {
+                regionStart = rStart;
+                regionEnd = rEnd;
+            }
+        }
+        this.performPileup(currentChr, regionStart, regionEnd, referenceFileS);
+        String outfileS = "chr"+FStringUtils.getNDigitNumber(3, currentChr)+".vcf";
+        outfileS = new File (vcfDirS, outfileS).getAbsolutePath();
+        int[][] binBound = this.creatBins(currentChr, binSize, regionStart, regionEnd);
+//        
+        try {
+            BufferedReader[] pileupReaders = this.getPileupReaders();
+            BufferedWriter bw = IoUtils.getTextWriter(outfileS);
+            bw.write(this.getAnnotation(referenceFileS));
+            bw.write(this.getVCFHeader());
+            bw.newLine();
+            List<Integer> bamIndexList = new ArrayList();
+            for (int i = 0; i < this.bamPaths.length; i++) {
+                bamIndexList.add(i);
+            }
+            List<Integer> positionIndexList = new ArrayList();
+            for (int i = 0; i < binSize; i++) {
+                positionIndexList.add(i);
+            }
+            for (int i = 0; i < binBound.length; i++) {
+                long startTimePoint = System.nanoTime();
+                int binStart = binBound[i][0];
+                int binEnd = binBound[i][1];
+                List<List<String>>[] pileupResult = null;
+                List<String>[] remainder = new List[bamPaths.length];
+                for (int j = 0; j < remainder.length; j++) remainder[j] = new ArrayList<String>();
+                pileupResult = this.getPileupResult(currentChr, binStart, binEnd, pileupReaders, remainder, bamIndexList);
+                StringBuilder[][] baseSb = this.getPopulateBaseBuilder(binStart, binEnd);
+                int[][] depth = this.getPopulatedDepthArray(binStart, binEnd);
+                this.fillDepthAndBase2(pileupResult, baseSb, depth, binStart);
+                String[][] base = this.getBaseMatrix(baseSb);
+                ArrayList<Integer> positionList = this.getPositionList(binStart, binEnd);
+                String[] subVCFs = new String[positionList.size()];
+                this.calculateVCF2(subVCFs, positionList, currentChr, binStart, chrSeq, depth, base);
+                for (int j = 0; j < positionList.size(); j++) {
+                    String vcfStr = subVCFs[j];
+                    if (vcfStr == null) continue;
+                    bw.write(vcfStr);
+                    bw.newLine();
+                }
+                StringBuilder sb = new StringBuilder();
+                sb.append("Bin from ").append(binStart).append(" to ").append(binEnd).append(" is finished. Took ").append(Benchmark.getTimeSpanSeconds(startTimePoint)).append(" seconds. Memory used: ").append(Benchmark.getUsedMemoryGb()).append(" Gb");
+                System.out.println(sb.toString());
+            }
+            bw.flush();
+            bw.close();
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+        }
+        System.out.println("Chromosome " + String.valueOf(currentChr) + " is finished. File written to " + outfileS + "\n");
     }
     
     private void callSNPByChromosome (int currentChr, int rStart, int rEnd, String referenceFileS, String vcfDirS) {
@@ -154,6 +233,9 @@ public class FastCallSNP {
         String outfileS = "chr"+FStringUtils.getNDigitNumber(3, currentChr)+".vcf";
         outfileS = new File (vcfDirS, outfileS).getAbsolutePath();
         int[][] binBound = this.creatBins(currentChr, binSize, regionStart, regionEnd);
+        
+        
+        
         try {
             HashMap<String, BufferedReader> bamPathPileupReaderMap = this.getBamPathPileupReaderMap();
             ConcurrentHashMap<BufferedReader, List<String>> readerRemainderMap = this.getReaderRemainderMap(bamPathPileupReaderMap);
@@ -190,6 +272,24 @@ public class FastCallSNP {
             e.printStackTrace();
         }
         System.out.println("Chromosome " + String.valueOf(currentChr) + " is finished. File written to " + outfileS + "\n");
+    }
+    
+    private void calculateVCF2 (String[] subVCFs, List<Integer> positionList, int currentChr, int startPos, String chrSeq, int[][] depth, String[][] base) {
+        positionList.parallelStream().forEach(position -> {
+            int index = position-startPos;
+            byte refBase = (byte)(chrSeq.charAt(position-1));
+            int baseIndex = Arrays.binarySearch(bases, refBase);
+            if (baseIndex < 0) {
+                
+            }
+            else {
+                //String vcfStr = this.getVCFStringV1(base[index], depth[index], currentChr, position, refBase);
+                String vcfStr = this.getVCFStringV2(base[index], depth[index], currentChr, position, refBase);
+                if (vcfStr != null) {
+                    subVCFs[index] = vcfStr;
+                }
+            }
+        });
     }
     
     private void calculateVCF (ConcurrentHashMap<Integer, String> posVCFMap, List<Integer> positionList, int currentChr, int startPos, String chrSeq, int[][] depth, String[][] base) {
@@ -485,42 +585,78 @@ public class FastCallSNP {
         return base;
     }
     
+    private void fillDepthAndBase2 (List<List<String>>[] pileupResult, StringBuilder[][] baseSb, int[][] depth, int startPos) {
+        Set<Map.Entry<String, String[]>> entries = this.taxaBamPathMap.entrySet();
+        List<Map.Entry<String,String[]>> entryList = new ArrayList(entries);
+        entryList.parallelStream().forEach(e -> {
+            String taxa = e.getKey();
+            int taxaIndex = Arrays.binarySearch(this.taxaNames, taxa);
+            String[] bams = e.getValue();
+            int[] indices = new int[bams.length];
+            for (int i = 0; i < indices.length; i++) {
+                indices[i] = Arrays.binarySearch(this.bamPaths, bams[i]);
+            }
+
+            int count = 0;
+            String b = null;
+            try {
+                for (int i = 0; i < bams.length; i++) {
+                    List<List<String>> lines = pileupResult[indices[i]];
+                    count = lines.size();
+                    b = bams[i];
+                    for (int j = 0; j < lines.size(); j++) {
+                        List<String> split = lines.get(j);                 
+                        //if (split.get(2).startsWith("N") || split.get(2).startsWith("n")) continue;
+                        String refB = split.get(2);
+                        if (Arrays.binarySearch(baseS, refB) < 0) continue;
+                        int siteIndex = Integer.valueOf(split.get(1)) - startPos;
+                        depth[siteIndex][taxaIndex]+=Integer.valueOf(split.get(3));
+                        baseSb[siteIndex][taxaIndex].append(split.get(4));
+                    }
+                }
+            }
+            catch (Exception ee) {
+                System.out.println(b);
+                System.out.println(count);
+                ee.printStackTrace();
+                System.exit(1);
+            }
+        });
+    }
+    
     private void fillDepthAndBase (ConcurrentHashMap<String, List<List<String>>> bamPileupResultMap, StringBuilder[][] baseSb, int[][] depth, int startPos) {
         Set<Map.Entry<String, String[]>> entries = this.taxaBamPathMap.entrySet();
         List<Map.Entry<String,String[]>> entryList = new ArrayList(entries);
-        for (int k = 0; k < bounds.length; k++) {
-            List<Map.Entry<String,String[]>> subList = entryList.subList(bounds[k][0], bounds[k][1]);
-            subList.parallelStream().forEach(e -> {
-                String taxa = e.getKey();
-                int taxaIndex = Arrays.binarySearch(this.taxaNames, taxa);
-                String[] bams = e.getValue();
+        entryList.parallelStream().forEach(e -> {
+            String taxa = e.getKey();
+            int taxaIndex = Arrays.binarySearch(this.taxaNames, taxa);
+            String[] bams = e.getValue();
 
-                int count = 0;
-                String b = null;
-                try {
-                    for (int i = 0; i < bams.length; i++) {
-                        List<List<String>> lines = bamPileupResultMap.get(bams[i]);
-                        count = lines.size();
-                        b = bams[i];
-                        for (int j = 0; j < lines.size(); j++) {
-                            List<String> split = lines.get(j);                 
-                            //if (split.get(2).startsWith("N") || split.get(2).startsWith("n")) continue;
-                            String refB = split.get(2);
-                            if (Arrays.binarySearch(baseS, refB) < 0) continue;
-                            int siteIndex = Integer.valueOf(split.get(1)) - startPos;
-                            depth[siteIndex][taxaIndex]+=Integer.valueOf(split.get(3));
-                            baseSb[siteIndex][taxaIndex].append(split.get(4));
-                        }
+            int count = 0;
+            String b = null;
+            try {
+                for (int i = 0; i < bams.length; i++) {
+                    List<List<String>> lines = bamPileupResultMap.get(bams[i]);
+                    count = lines.size();
+                    b = bams[i];
+                    for (int j = 0; j < lines.size(); j++) {
+                        List<String> split = lines.get(j);                 
+                        //if (split.get(2).startsWith("N") || split.get(2).startsWith("n")) continue;
+                        String refB = split.get(2);
+                        if (Arrays.binarySearch(baseS, refB) < 0) continue;
+                        int siteIndex = Integer.valueOf(split.get(1)) - startPos;
+                        depth[siteIndex][taxaIndex]+=Integer.valueOf(split.get(3));
+                        baseSb[siteIndex][taxaIndex].append(split.get(4));
                     }
                 }
-                catch (Exception ee) {
-                    System.out.println(b);
-                    System.out.println(count);
-                    ee.printStackTrace();
-                    System.exit(1);
-                }
-            });
-        }
+            }
+            catch (Exception ee) {
+                System.out.println(b);
+                System.out.println(count);
+                ee.printStackTrace();
+                System.exit(1);
+            }
+        });
     }
     
     /**
@@ -797,6 +933,69 @@ public class FastCallSNP {
         return sbs;
     }
     
+    private List<List<String>>[] getPileupResult (int currentChr, int binStart, int binEnd, BufferedReader[] pileupReaders, List<String>[] remainders, List<Integer> bamIndexList) {
+        ArrayList<String> empty = new ArrayList();
+        List<List<String>>[] pileupResult = new List[bamPaths.length];
+        bamIndexList.parallelStream().forEach(bamIndex -> {
+            ArrayList<List<String>> lineList = new ArrayList();
+            BufferedReader br = pileupReaders[bamIndex];
+            List<String> remainder = remainders[bamIndex];
+            boolean flag = false;
+            if (remainder.size() == 0) {
+                String temp = null;
+                try {
+                    temp = br.readLine();
+                }
+                catch (Exception e) {}
+                if (temp != null) {
+                    List<String> split = FStringUtils.fastSplit(temp, "\t");
+                    int currentPos = Integer.valueOf(split.get(1));
+                    if (currentPos > binEnd) {
+                        remainders[bamIndex] = split;
+                    }
+                    else {
+                        lineList.add(split);
+                        flag = true;
+                    }
+                }
+            }
+            else {
+                int currentPos = Integer.valueOf(remainder.get(1));
+                if (currentPos <= binEnd) {
+                    lineList.add(remainder);
+                    flag = true;
+                    remainders[bamIndex] = empty;
+                }
+            }
+            if (flag == true) {
+                try {
+                    String temp;
+                    while ((temp = br.readLine()) != null) {
+                        List<String> split = FStringUtils.fastSplit(temp, "\t");
+                        int currentPos = Integer.valueOf(split.get(1));
+                        if (currentPos < binEnd) {
+                            lineList.add(split);
+                        }
+                        else if (currentPos == binEnd){
+                            lineList.add(split);
+                            remainders[bamIndex] = empty;
+                            break;
+                        }
+                        else {
+                            remainders[bamIndex] = split;
+                            break;
+                        }
+                    }
+                }
+                catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+            pileupResult[bamIndex] = lineList;
+        });
+        return pileupResult;
+    }
+    
     private ConcurrentHashMap<String, List<List<String>>> getBamPileupResultMap (int currentChr, int binStart, int binEnd, HashMap<String, BufferedReader> bamPathPileupReaderMap, ConcurrentHashMap<BufferedReader, List<String>> readerRemainderMap) {
         ArrayList<String> empty = new ArrayList();
         ConcurrentHashMap<String, List<List<String>>> bamPileupMap = new ConcurrentHashMap(2048);
@@ -869,6 +1068,25 @@ public class FastCallSNP {
             readerRemainderMap.put(e.getValue(), empty);
         });
         return readerRemainderMap;
+    }
+    
+    private BufferedReader[] getPileupReaders () {
+        BufferedReader[] brs = new BufferedReader[this.bamPaths.length];
+        try {
+            for (int i = 0; i < this.bamPaths.length; i++) {
+                String pileupFileS = this.bamPathPileupPathMap.get(bamPaths[i]);
+                File pileupF = new File(pileupFileS);
+                if (!pileupF.exists()) {
+                    brs[i] = new BufferedReader(new StringReader(""), 65536);
+                    continue;
+                }
+                brs[i] = new BufferedReader (new FileReader(pileupF), 65536);
+            }
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+        }
+        return brs;
     }
     
     private HashMap<String, BufferedReader> getBamPathPileupReaderMap () {
@@ -1035,6 +1253,7 @@ public class FastCallSNP {
     }
     
     private void getTaxaBamMap (String taxaBamMapFileS) {
+        this.bamPathTaxamap = new HashMap();
         this.taxaBamPathMap = new HashMap();
         this.taxaCoverageMap = new HashMap();
         try {
@@ -1050,6 +1269,7 @@ public class FastCallSNP {
                 for (int i = 0; i < bams.length; i++) {
                     bams[i] = tem[i+2];
                     pathList.add(bams[i]);
+                    this.bamPathTaxamap.put(bams[i], tem[0]);
                 }
                 Arrays.sort(bams);
                 taxaBamPathMap.put(tem[0], bams);
@@ -1069,6 +1289,11 @@ public class FastCallSNP {
             }
             this.bamPaths = pathList.toArray(new String[pathList.size()]);
             Arrays.sort(bamPaths);
+            this.bamTaxaIndices = new int[bamPaths.length];
+            for (int i = 0; i < bamPaths.length; i++) {
+                int index = Arrays.binarySearch(taxaNames, this.bamPathTaxamap.get(bamPaths[i]));
+                bamTaxaIndices[i] = index;
+            }
             bounds = FArrayUtils.getSubsetsIndicesBySubsetSize(taxaNames.length, this.threadsNum);
             System.out.println("Created TaxaBamMap from" + taxaBamMapFileS);
             System.out.println("Taxa number:\t"+String.valueOf(taxaNames.length));
