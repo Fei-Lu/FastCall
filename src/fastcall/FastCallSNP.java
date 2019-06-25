@@ -127,6 +127,8 @@ public class FastCallSNP {
         this.creatFactorialMap();
         this.callSNPByChromosome2(currentChr, regionStart, regionEnd, referenceFileS, vcfDirS); //removeed all concurrenthashmap
 //        this.callSNPByChromosome(currentChr, regionStart, regionEnd, referenceFileS, vcfDirS);
+        File[] fs = new File(vcfDirS).listFiles();
+        for (int i = 0; i < fs.length; i++) fs[i].delete();
         System.out.println("Variant calling completed");
     }
     
@@ -1321,7 +1323,7 @@ public class FastCallSNP {
         sb.append("##INFO=<ID=DI,Number=2,Type=Integer,Description=\"").append("Number of deletion and insertion type").append("\">\n");
         sb.append("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"").append("Genotype").append("\">\n");
         sb.append("##FORMAT=<ID=AD,Number=.,Type=Integer,Description=\"").append("Allelic depths for the reference and alternate alleles in the order listed").append("\">\n");
-        sb.append("##FORMAT=<ID=PL,Number=.,Type=Integer,Description=\"").append("Genotype likelihoods for 0/0, 0/1, 1/1, or 0/0, 0/1, 0/2, 1/1, 1/2, 2/2 if 2 alt alleles").append("\">\n");
+        sb.append("##FORMAT=<ID=PL,Number=G,Type=Integer,Description=\"").append("Genotype likelihoods for 0/0, 0/1, 1/1, or 0/0, 0/1, 0/2, 1/1, 1/2, 2/2 if 2 alt alleles").append("\">\n");
         return sb.toString();
     }
     
