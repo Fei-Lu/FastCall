@@ -127,7 +127,7 @@ public class FastCallSNP {
         this.creatFactorialMap();
         this.callSNPByChromosome2(currentChr, regionStart, regionEnd, referenceFileS, vcfDirS); //removeed all concurrenthashmap
 //        this.callSNPByChromosome(currentChr, regionStart, regionEnd, referenceFileS, vcfDirS);
-        File[] fs = new File(vcfDirS).listFiles();
+        File[] fs = new File(pileupDirS).listFiles();
         for (int i = 0; i < fs.length; i++) fs[i].delete();
         System.out.println("Variant calling completed");
     }
