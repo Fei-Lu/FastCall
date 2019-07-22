@@ -285,8 +285,8 @@ public class FastCallSNP {
                 
             }
             else {
-                //String vcfStr = this.getVCFStringV1(base[index], depth[index], currentChr, position, refBase);
-                String vcfStr = this.getVCFStringV2(base[index], depth[index], currentChr, position, refBase);
+                //String vcfStr = this.getVCFStringV1(base[index], depth[index], currentChr, position, refBase); // no limit on sequencing depth
+                String vcfStr = this.getVCFStringV2(base[index], depth[index], currentChr, position, refBase); //limit on sequencing depth
                 if (vcfStr != null) {
                     subVCFs[index] = vcfStr;
                 }
