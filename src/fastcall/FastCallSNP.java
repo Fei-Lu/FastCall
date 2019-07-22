@@ -126,7 +126,7 @@ public class FastCallSNP {
         this.creatPileupMap(pileupDirS);
         this.creatFactorialMap();
         this.callSNPByChromosome2(currentChr, regionStart, regionEnd, referenceFileS, vcfDirS); //removeed all concurrenthashmap
-//        this.callSNPByChromosome(currentChr, regionStart, regionEnd, referenceFileS, vcfDirS);
+//        this.callSNPByChromosome(currentChr, regionStart, regionEnd, referenceFileS, vcfDirS);// old stuff
         File[] fs = new File(pileupDirS).listFiles();
         for (int i = 0; i < fs.length; i++) fs[i].delete();
         System.out.println("Variant calling completed");
@@ -327,7 +327,7 @@ public class FastCallSNP {
             totalDepth+=depth[i];
         }
         if (totalDepth == 0) return null;
-        TByteArrayList bList;
+        TByteArrayList bList;        
         boolean ifRecordedDeletion = false;
         TIntHashSet insertionLengthSet = new TIntHashSet();
         TIntHashSet deletionLengthSet = new TIntHashSet();
@@ -383,9 +383,7 @@ public class FastCallSNP {
                     insertionLengthSet.add(length);
                     j+=sb.length();
                     j+=length;
-                    if (ba[j-1] == '.' || ba[j-1] == ',') {
-                        bList.add((byte)73);
-                    }                   
+                    bList.replace(bList.size()-1, (byte)73);                  
                 }
                 else if (ba[j] == '-') {
                     int endIndex = j+2;
@@ -403,9 +401,7 @@ public class FastCallSNP {
                     deletionLengthSet.add(length);
                     j+=sb.length();
                     j+=length;
-                    if (ba[j-1] == '.' || ba[j-1] == ',') {
-                        bList.add((byte)68);
-                    }
+                    bList.replace(bList.size()-1, (byte)68);
                 }
                 else if (ba[j] == '^') {
                     j++;
